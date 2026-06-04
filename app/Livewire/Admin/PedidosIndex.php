@@ -39,6 +39,17 @@ class PedidosIndex extends Component
     public $cliente_search = '';
     public $clientes_buscados = [];
 
+    // Registro de nuevo cliente
+    public $mostrar_formulario_cliente = false;
+    public $nuevo_cliente_nombre = '';
+    public $nuevo_cliente_apellido = '';
+    public $nuevo_cliente_correo = '';
+    public $nuevo_cliente_telefono = '';
+    public $nuevo_cliente_whatsapp = '';
+    public $nuevo_cliente_nit_ci = '';
+    public $nuevo_cliente_empresa = '';
+    public $nuevo_cliente_canal = 'presencial';
+
     // Productos del pedido
     public $producto_actual_id;
     public $producto_actual_cantidad = 1;
@@ -60,6 +71,7 @@ class PedidosIndex extends Component
 
     protected $messages = [
         'cliente_id.required' => 'Debe seleccionar un cliente.',
+        'fecha_entrega.date' => 'La fecha de entrega debe ser una fecha válida.',
         'monto_pagado.required' => 'El monto pagado es obligatorio.',
         'monto_pagado.numeric' => 'El monto pagado debe ser un número.',
         'monto_pagado.min' => 'El monto pagado no puede ser negativo.',
@@ -105,16 +117,76 @@ class PedidosIndex extends Component
     public function updatedClienteSearch()
     {
         if (strlen($this->cliente_search) >= 2) {
-            $this->clientes_buscados = Cliente::where(function($query) {
-                $query->where('nombre', 'like', '%' . $this->cliente_search . '%')
-                      ->orWhere('apellido', 'like', '%' . $this->cliente_search . '%')
-                      ->orWhere('correo', 'like', '%' . $this->cliente_search . '%');
+            $driver = \DB::connection()->getDriverName();
+            $likeOperator = $driver === 'pgsql' ? 'ilike' : 'like';
+
+            $this->clientes_buscados = Cliente::where(function($query) use ($likeOperator) {
+                $query->where('nombre', $likeOperator, '%' . $this->cliente_search . '%')
+                      ->orWhere('apellido', $likeOperator, '%' . $this->cliente_search . '%')
+                      ->orWhere('correo', $likeOperator, '%' . $this->cliente_search . '%')
+                      ->orWhere(\DB::raw("nombre || ' ' || apellido"), $likeOperator, '%' . $this->cliente_search . '%');
             })
             ->limit(5)
             ->get();
         } else {
             $this->clientes_buscados = [];
         }
+    }
+
+    public function registrarCliente()
+    {
+        $this->validate([
+            'nuevo_cliente_nombre' => 'required|string|max:80',
+            'nuevo_cliente_apellido' => 'required|string|max:80',
+            'nuevo_cliente_correo' => 'nullable|email|max:150',
+            'nuevo_cliente_telefono' => 'nullable|string|max:20',
+            'nuevo_cliente_whatsapp' => 'nullable|string|max:20',
+            'nuevo_cliente_nit_ci' => 'nullable|string|max:20',
+            'nuevo_cliente_empresa' => 'nullable|string|max:150',
+            'nuevo_cliente_canal' => 'required|string|in:presencial,web,whatsapp,redes_sociales,referido',
+        ], [
+            'nuevo_cliente_nombre.required' => 'El nombre es obligatorio.',
+            'nuevo_cliente_nombre.max' => 'El nombre no puede tener más de 80 caracteres.',
+            'nuevo_cliente_apellido.required' => 'El apellido es obligatorio.',
+            'nuevo_cliente_apellido.max' => 'El apellido no puede tener más de 80 caracteres.',
+            'nuevo_cliente_correo.email' => 'El correo debe ser una dirección válida.',
+            'nuevo_cliente_correo.max' => 'El correo no puede tener más de 150 caracteres.',
+            'nuevo_cliente_telefono.max' => 'El teléfono no puede tener más de 20 caracteres.',
+            'nuevo_cliente_whatsapp.max' => 'El WhatsApp no puede tener más de 20 caracteres.',
+            'nuevo_cliente_nit_ci.max' => 'El NIT/CI no puede tener más de 20 caracteres.',
+            'nuevo_cliente_empresa.max' => 'La empresa no puede tener más de 150 caracteres.',
+        ]);
+
+        $cliente = Cliente::create([
+            'nombre' => $this->nuevo_cliente_nombre,
+            'apellido' => $this->nuevo_cliente_apellido,
+            'correo' => $this->nuevo_cliente_correo ?: null,
+            'telefono' => $this->nuevo_cliente_telefono ?: null,
+            'whatsapp' => $this->nuevo_cliente_whatsapp ?: null,
+            'nit_ci' => $this->nuevo_cliente_nit_ci ?: null,
+            'empresa' => $this->nuevo_cliente_empresa ?: null,
+            'canal' => $this->nuevo_cliente_canal,
+        ]);
+
+        $this->cliente_id = $cliente->id;
+        $this->cliente_nombre = $cliente->nombre_completo . ' (' . ($cliente->correo ?? 'Sin correo') . ')';
+        
+        $this->resetNuevoClienteForm();
+        
+        session()->flash('message', 'Cliente registrado y seleccionado correctamente.');
+    }
+
+    public function resetNuevoClienteForm()
+    {
+        $this->nuevo_cliente_nombre = '';
+        $this->nuevo_cliente_apellido = '';
+        $this->nuevo_cliente_correo = '';
+        $this->nuevo_cliente_telefono = '';
+        $this->nuevo_cliente_whatsapp = '';
+        $this->nuevo_cliente_nit_ci = '';
+        $this->nuevo_cliente_empresa = '';
+        $this->nuevo_cliente_canal = 'presencial';
+        $this->mostrar_formulario_cliente = false;
     }
 
     public function seleccionarCliente($id)
@@ -275,6 +347,7 @@ class PedidosIndex extends Component
 
     public function store()
     {
+        $this->usuario_id = auth()->id();
         $this->validate();
 
         // Validaciones lógicas adicionales
@@ -513,6 +586,16 @@ class PedidosIndex extends Component
         $this->producto_actual_id = null;
         $this->producto_actual_cantidad = 1;
         $this->producto_actual_personalizacion = '';
+        
+        $this->nuevo_cliente_nombre = '';
+        $this->nuevo_cliente_apellido = '';
+        $this->nuevo_cliente_correo = '';
+        $this->nuevo_cliente_telefono = '';
+        $this->nuevo_cliente_whatsapp = '';
+        $this->nuevo_cliente_nit_ci = '';
+        $this->nuevo_cliente_empresa = '';
+        $this->nuevo_cliente_canal = 'presencial';
+        $this->mostrar_formulario_cliente = false;
     }
 
     public function updatedSearch()

@@ -178,27 +178,106 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">Fecha de Entrega</label>
                             <input type="date" wire:model="fecha_entrega"
                                 class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            @error('fecha_entrega') <span class="text-red-500 text-xs mt-1 block">{{ $message }}</span> @enderror
                         </div>
 
-                        <!-- Buscar Cliente -->
+                        <!-- Buscar Cliente / Registro Rápido -->
                         <div class="md:col-span-2">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Cliente <span class="text-red-500">*</span></label>
                             @if(!$cliente_id)
-                            <div class="relative">
-                                <input type="text" wire:model.live.debounce.300ms="cliente_search"
-                                    class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Buscar cliente por nombre, apellido o correo...">
-                                @if($clientes_buscados)
-                                <div class="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                                    @foreach($clientes_buscados as $cliente)
-                                    <div wire:click="seleccionarCliente({{ $cliente->id }})" class="px-3 py-2 hover:bg-gray-100 cursor-pointer">
-                                        <div class="font-medium">{{ $cliente->nombre_completo }}</div>
-                                        <div class="text-xs text-gray-500">{{ $cliente->correo }}</div>
+                                @if(!$mostrar_formulario_cliente)
+                                <div class="relative">
+                                    <div class="flex gap-2">
+                                        <div class="relative flex-grow">
+                                            <input type="text" wire:model.live.debounce.300ms="cliente_search"
+                                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                                placeholder="Buscar cliente por nombre, apellido o correo...">
+                                            @if(count($clientes_buscados) > 0)
+                                            <div class="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                                                @foreach($clientes_buscados as $cliente)
+                                                <div wire:click="seleccionarCliente({{ $cliente->id }})" class="px-3 py-2 hover:bg-gray-100 cursor-pointer">
+                                                    <div class="font-medium">{{ $cliente->nombre_completo }}</div>
+                                                    <div class="text-xs text-gray-500">{{ $cliente->correo }}</div>
+                                                </div>
+                                                @endforeach
+                                            </div>
+                                            @endif
+                                        </div>
+                                        <button type="button" wire:click="$set('mostrar_formulario_cliente', true)" 
+                                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 border">
+                                            <i class="fas fa-plus"></i>
+                                            <span>Nuevo</span>
+                                        </button>
                                     </div>
-                                    @endforeach
+                                    @if($cliente_search && count($clientes_buscados) == 0)
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        No se encontraron clientes. Puedes 
+                                        <button type="button" wire:click="$set('mostrar_formulario_cliente', true)" class="text-blue-600 hover:underline">registrar uno nuevo</button>.
+                                    </p>
+                                    @endif
+                                </div>
+                                @else
+                                <!-- Formulario de registro rápido de cliente -->
+                                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 animate-fadeIn">
+                                    <div class="flex justify-between items-center mb-3">
+                                        <h4 class="text-sm font-semibold text-gray-700">Registrar Nuevo Cliente</h4>
+                                        <button type="button" wire:click="resetNuevoClienteForm" class="text-gray-400 hover:text-gray-600 text-xs">
+                                            <i class="fas fa-times mr-1"></i> Cancelar
+                                        </button>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">Nombre <span class="text-red-500">*</span></label>
+                                            <input type="text" wire:model="nuevo_cliente_nombre" class="w-full px-3 py-1.5 text-xs border rounded-lg focus:ring-1 focus:ring-blue-500">
+                                            @error('nuevo_cliente_nombre') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">Apellido <span class="text-red-500">*</span></label>
+                                            <input type="text" wire:model="nuevo_cliente_apellido" class="w-full px-3 py-1.5 text-xs border rounded-lg focus:ring-1 focus:ring-blue-500">
+                                            @error('nuevo_cliente_apellido') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">Correo Electrónico</label>
+                                            <input type="email" wire:model="nuevo_cliente_correo" class="w-full px-3 py-1.5 text-xs border rounded-lg focus:ring-1 focus:ring-blue-500">
+                                            @error('nuevo_cliente_correo') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">NIT / CI</label>
+                                            <input type="text" wire:model="nuevo_cliente_nit_ci" class="w-full px-3 py-1.5 text-xs border rounded-lg focus:ring-1 focus:ring-blue-500">
+                                            @error('nuevo_cliente_nit_ci') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">Teléfono</label>
+                                            <input type="text" wire:model="nuevo_cliente_telefono" class="w-full px-3 py-1.5 text-xs border rounded-lg focus:ring-1 focus:ring-blue-500">
+                                            @error('nuevo_cliente_telefono') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">WhatsApp</label>
+                                            <input type="text" wire:model="nuevo_cliente_whatsapp" class="w-full px-3 py-1.5 text-xs border rounded-lg focus:ring-1 focus:ring-blue-500">
+                                            @error('nuevo_cliente_whatsapp') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">Empresa</label>
+                                            <input type="text" wire:model="nuevo_cliente_empresa" class="w-full px-3 py-1.5 text-xs border rounded-lg focus:ring-1 focus:ring-blue-500">
+                                            @error('nuevo_cliente_empresa') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">Canal de Registro</label>
+                                            <select wire:model="nuevo_cliente_canal" class="w-full px-3 py-1.5 text-xs border rounded-lg focus:ring-1 focus:ring-blue-500">
+                                                <option value="presencial">Presencial</option>
+                                                <option value="web">Web</option>
+                                                <option value="whatsapp">WhatsApp</option>
+                                                <option value="redes_sociales">Redes Sociales</option>
+                                                <option value="referido">Referido</option>
+                                            </select>
+                                            @error('nuevo_cliente_canal') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                                        </div>
+                                    </div>
+                                    <button type="button" wire:click="registrarCliente" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg transition">
+                                        <i class="fas fa-save mr-1"></i> Registrar y Seleccionar
+                                    </button>
                                 </div>
                                 @endif
-                            </div>
                             @else
                             <div class="flex items-center justify-between bg-blue-50 p-2 rounded-lg">
                                 <div>
@@ -209,7 +288,7 @@
                                 </button>
                             </div>
                             @endif
-                            @error('cliente_id') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            @error('cliente_id') <span class="text-red-500 text-xs mt-1 block">{{ $message }}</span> @enderror
                         </div>
 
                         <!-- Productos del Pedido -->
@@ -288,11 +367,13 @@
                                 <option value="{{ $key }}">{{ $nombre }}</option>
                                 @endforeach
                             </select>
+                            @error('estado') <span class="text-red-500 text-xs mt-1 block">{{ $message }}</span> @enderror
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Monto Pagado (Bs.)</label>
                             <input type="number" step="0.01" wire:model="monto_pagado"
                                 class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            @error('monto_pagado') <span class="text-red-500 text-xs mt-1 block">{{ $message }}</span> @enderror
                         </div>
                     </div>
                 </div>
