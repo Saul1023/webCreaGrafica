@@ -53,9 +53,19 @@ class Producto extends Model
         return $this->hasMany(DetallePedido::class, 'producto_id');
     }
 
+    public function detallesCompra()
+    {
+        return $this->hasMany(DetalleCompra::class, 'producto_id');
+    }
+
     public function movimientosStock()
     {
         return $this->hasMany(MovimientoStock::class, 'producto_id');
+    }
+
+    public function ofertas()
+    {
+        return $this->belongsToMany(Oferta::class, 'oferta_producto', 'producto_id', 'oferta_id');
     }
 
     // Accessors
@@ -69,6 +79,26 @@ class Producto extends Model
         return $this->stock <= $this->stock_minimo;
     }
 
+    public function getPrecioFinalAttribute()
+    {
+        $ofertaActiva = $this->oferta_activa;
+        if ($ofertaActiva) {
+            $descuentoDecimal = $ofertaActiva->descuento / 100;
+            return $this->precio * (1 - $descuentoDecimal);
+        }
+        return $this->precio;
+    }
+
+    public function getEnOfertaAttribute()
+    {
+        return $this->ofertas()->activas()->exists();
+    }
+
+    public function getOfertaActivaAttribute()
+    {
+        return $this->ofertas()->activas()->orderByDesc('descuento')->first();
+    }
+
     // Scopes
     public function scopeConStockBajo($query)
     {
@@ -78,6 +108,13 @@ class Producto extends Model
     public function scopeDisponibles($query)
     {
         return $query->where('stock', '>', 0);
+    }
+
+    public function scopeEnOferta($query)
+    {
+        return $query->whereHas('ofertas', function ($q) {
+            $q->activas();
+        });
     }
 
     // Methods

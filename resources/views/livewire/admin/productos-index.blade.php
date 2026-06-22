@@ -86,10 +86,17 @@
                             <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">{{ $producto->sku }}</span>
                         </td>
                         <td class="px-6 py-4">
-                            <div class="text-sm font-bold text-green-600">Bs. {{ number_format($producto->precio, 2) }}
-                            </div>
+                            @if($producto->en_oferta)
+                                <div class="text-xs font-bold text-gray-400 line-through">Bs. {{ number_format($producto->precio, 2) }}</div>
+                                <div class="text-sm font-bold text-red-650">Bs. {{ number_format($producto->precio_final, 2) }}</div>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-800 mt-0.5" title="{{ $producto->oferta_activa->nombre }}">
+                                    OFERTA -{{ number_format($producto->oferta_activa->descuento, 0) }}%
+                                </span>
+                            @else
+                                <div class="text-sm font-bold text-green-600">Bs. {{ number_format($producto->precio, 2) }}</div>
+                            @endif
                             <div
-                                class="text-xs {{ $producto->stock <= 5 ? 'text-red-500 font-semibold' : 'text-gray-500' }}">
+                                class="text-xs {{ $producto->stock <= 5 ? 'text-red-500 font-semibold' : 'text-gray-500' }} mt-1">
                                 <i class="fas fa-boxes mr-1"></i> Stock: {{ $producto->stock }}
                                 @if($producto->stock <= 5 && $producto->stock > 0)
                                     <span class="text-orange-500 ml-1">(Bajo stock)</span>
@@ -208,7 +215,7 @@
 
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Precio (Bs.) <span
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Precio Standard (Bs.) <span
                                     class="text-red-500">*</span></label>
                             <div class="relative">
                                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i
@@ -218,6 +225,7 @@
                             </div>
                             @error('precio') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
+
 
 
                         <div>
@@ -270,6 +278,7 @@
                                     class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                                 <span class="ml-2 text-sm text-gray-700 font-medium">Producto Activo</span>
                             </label>
+
                             <label class="flex items-center cursor-pointer select-none">
                                 <input type="checkbox" wire:model.live="tiene_3d"
                                     class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">

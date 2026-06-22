@@ -74,14 +74,14 @@ class PerfilIndex extends Component
         $usuario = Auth::user();
 
         // Validar que la contraseña actual sea correcta
-        if (!Hash::check($this->current_password, $usuario->password)) {
+        if (!Hash::check($this->current_password, $usuario->clave)) {
             $this->addError('current_password', 'La contraseña actual no es correcta.');
             return;
         }
 
         // Actualizar contraseña encriptada
         $usuario->update([
-            'password' => Hash::make($this->password),
+            'clave' => $this->password,
             'actualizado_en' => now()
         ]);
 

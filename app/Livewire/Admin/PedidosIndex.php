@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Models\Cliente;
 use App\Models\DetallePedido;
+use App\Models\Usuario;
 use App\Models\Pedido;
 use App\Models\Producto;
 use Livewire\Component;
@@ -35,6 +36,13 @@ class PedidosIndex extends Component
     public $monto_pagado = 0;
     public $fecha_entrega;
 
+    // Abonos / Pagos
+    public $isOpenAbonosModal = false;
+    public $monto_abono;
+    public $metodo_pago_abono = 'efectivo';
+    public $referencia_abono;
+    public $abonosHistoricos = [];
+
     // Búsqueda de clientes
     public $cliente_search = '';
     public $clientes_buscados = [];
@@ -55,6 +63,11 @@ class PedidosIndex extends Component
     public $producto_actual_cantidad = 1;
     public $producto_actual_personalizacion = '';
     public $detalles = [];
+
+    // Búsqueda de productos
+    public $producto_search = '';
+    public $productos_buscados = [];
+    public $producto_actual_nombre = '';
 
     // Totales
     public $total = 0;
@@ -79,14 +92,19 @@ class PedidosIndex extends Component
 
     public function render()
     {
+        $driver = \DB::connection()->getDriverName();
+        $likeOperator = $driver === 'pgsql' ? 'ilike' : 'like';
+
         $pedidos = Pedido::with(['cliente', 'usuario'])
-            ->when($this->search, function($query) {
-                $query->where(function($q) {
-                    $q->where('numero_pedido', 'like', '%' . $this->search . '%')
-                      ->orWhereHas('cliente', function($subQ) {
-                          $subQ->where('nombre', 'like', '%' . $this->search . '%')
-                               ->orWhere('apellido', 'like', '%' . $this->search . '%')
-                               ->orWhere('correo', 'like', '%' . $this->search . '%');
+            ->when($this->search, function($query) use ($likeOperator) {
+                $query->where(function($q) use ($likeOperator) {
+                    $q->where('numero_pedido', $likeOperator, '%' . $this->search . '%')
+                      ->orWhereHas('cliente', function($subQ) use ($likeOperator) {
+                          $subQ->where('nombre', $likeOperator, '%' . $this->search . '%')
+                               ->orWhere('apellido', $likeOperator, '%' . $this->search . '%')
+                               ->orWhere('correo', $likeOperator, '%' . $this->search . '%')
+                               ->orWhere('nit_ci', $likeOperator, '%' . $this->search . '%')
+                               ->orWhere(\DB::raw("nombre || ' ' || apellido"), $likeOperator, '%' . $this->search . '%');
                       });
                 });
             })
@@ -116,21 +134,78 @@ class PedidosIndex extends Component
 
     public function updatedClienteSearch()
     {
-        if (strlen($this->cliente_search) >= 2) {
-            $driver = \DB::connection()->getDriverName();
-            $likeOperator = $driver === 'pgsql' ? 'ilike' : 'like';
+        $driver = \DB::connection()->getDriverName();
+        $likeOperator = $driver === 'pgsql' ? 'ilike' : 'like';
 
-            $this->clientes_buscados = Cliente::where(function($query) use ($likeOperator) {
+        // 1. Buscar en la tabla de clientes
+        $clientesQuery = Cliente::query();
+        if (strlen($this->cliente_search) >= 1) {
+            $clientesQuery->where(function($query) use ($likeOperator) {
                 $query->where('nombre', $likeOperator, '%' . $this->cliente_search . '%')
                       ->orWhere('apellido', $likeOperator, '%' . $this->cliente_search . '%')
                       ->orWhere('correo', $likeOperator, '%' . $this->cliente_search . '%')
+                      ->orWhere('nit_ci', $likeOperator, '%' . $this->cliente_search . '%')
                       ->orWhere(\DB::raw("nombre || ' ' || apellido"), $likeOperator, '%' . $this->cliente_search . '%');
-            })
-            ->limit(5)
-            ->get();
+            });
+        }
+        $clientes = $clientesQuery->limit(20)
+            ->get()
+            ->map(function($item) {
+                $item->is_usuario = false;
+                return $item;
+            });
+
+        // 2. Buscar en la tabla de usuarios con rol_id = 2 (Clientes de la tienda)
+        $usuariosQuery = Usuario::where('rol_id', 2);
+        if (strlen($this->cliente_search) >= 1) {
+            $usuariosQuery->where(function($query) use ($likeOperator) {
+                $query->where('nombre', $likeOperator, '%' . $this->cliente_search . '%')
+                      ->orWhere('apellido', $likeOperator, '%' . $this->cliente_search . '%')
+                      ->orWhere('correo', $likeOperator, '%' . $this->cliente_search . '%')
+                      ->orWhere('telefono', $likeOperator, '%' . $this->cliente_search . '%')
+                      ->orWhere(\DB::raw("nombre || ' ' || apellido"), $likeOperator, '%' . $this->cliente_search . '%');
+            });
+        }
+        $usuarios = $usuariosQuery->limit(20)
+            ->get()
+            ->map(function($item) {
+                $item->is_usuario = true;
+                $item->nombre_completo = $item->nombre . ' ' . $item->apellido;
+                $item->nit_ci = null;
+                return $item;
+            });
+
+        // Combinar colecciones evitando duplicados por correo
+        $combined = collect();
+        
+        foreach ($clientes as $c) {
+            $combined->push($c);
+        }
+
+        foreach ($usuarios as $u) {
+            $exists = $combined->contains(function($value) use ($u) {
+                return $value->correo && $u->correo && strtolower($value->correo) === strtolower($u->correo);
+            });
+            if (!$exists) {
+                $combined->push($u);
+            }
+        }
+
+        $this->clientes_buscados = $combined->take(20)->all();
+    }
+
+    public function toggleClientesDropdown()
+    {
+        if (empty($this->clientes_buscados)) {
+            $this->updatedClienteSearch();
         } else {
             $this->clientes_buscados = [];
         }
+    }
+
+    public function buscarClientes()
+    {
+        $this->updatedClienteSearch();
     }
 
     public function registrarCliente()
@@ -169,7 +244,7 @@ class PedidosIndex extends Component
         ]);
 
         $this->cliente_id = $cliente->id;
-        $this->cliente_nombre = $cliente->nombre_completo . ' (' . ($cliente->correo ?? 'Sin correo') . ')';
+        $this->cliente_nombre = $cliente->nombre_completo . ($cliente->nit_ci ? ' (CI: ' . $cliente->nit_ci . ')' : '') . ' - ' . ($cliente->correo ?? 'Sin correo');
         
         $this->resetNuevoClienteForm();
         
@@ -189,19 +264,77 @@ class PedidosIndex extends Component
         $this->mostrar_formulario_cliente = false;
     }
 
-    public function seleccionarCliente($id)
+    public function seleccionarCliente($id, $isUsuario = false)
     {
+        if ($isUsuario) {
+            $usuario = Usuario::find($id);
+            if ($usuario) {
+                $cliente = Cliente::where('correo', $usuario->correo)->first();
+                if (!$cliente) {
+                    $cliente = Cliente::create([
+                        'nombre' => $usuario->nombre,
+                        'apellido' => $usuario->apellido,
+                        'correo' => $usuario->correo,
+                        'telefono' => $usuario->telefono,
+                        'canal' => 'web',
+                    ]);
+                }
+                $id = $cliente->id;
+            }
+        }
+
         $this->cliente_id = $id;
         $cliente = Cliente::find($id);
-        $this->cliente_nombre = $cliente ? $cliente->nombre_completo . ' (' . $cliente->correo . ')' : '';
+        $this->cliente_nombre = $cliente ? $cliente->nombre_completo . ($cliente->nit_ci ? ' (CI: ' . $cliente->nit_ci . ')' : '') . ' - ' . ($cliente->correo ?? 'Sin correo') : '';
         $this->cliente_search = '';
         $this->clientes_buscados = [];
+    }
+
+    public function updatedProductoSearch()
+    {
+        $driver = \DB::connection()->getDriverName();
+        $likeOperator = $driver === 'pgsql' ? 'ilike' : 'like';
+
+        $query = Producto::where('activo', true);
+
+        if (strlen($this->producto_search) >= 1) {
+            $query->where(function($q) use ($likeOperator) {
+                $q->where('nombre', $likeOperator, '%' . $this->producto_search . '%')
+                  ->orWhere('sku', $likeOperator, '%' . $this->producto_search . '%')
+                  ->orWhere('descripcion', $likeOperator, '%' . $this->producto_search . '%');
+            });
+        }
+
+        $this->productos_buscados = $query->orderBy('nombre')->limit(20)->get();
+    }
+
+    public function toggleProductosDropdown()
+    {
+        if (empty($this->productos_buscados)) {
+            $this->updatedProductoSearch();
+        } else {
+            $this->productos_buscados = [];
+        }
+    }
+
+    public function buscarProductos()
+    {
+        $this->updatedProductoSearch();
+    }
+
+    public function seleccionarProducto($id)
+    {
+        $this->producto_actual_id = $id;
+        $producto = Producto::find($id);
+        $this->producto_actual_nombre = $producto ? $producto->nombre . ' (Bs. ' . number_format($producto->precio, 2) . ') - Stock: ' . $producto->stock : '';
+        $this->producto_search = '';
+        $this->productos_buscados = [];
     }
 
     public function create()
     {
         $this->resetInputFields();
-        $this->numero_pedido = 'PED-' . date('Ymd') . '-' . strtoupper(uniqid());
+        $this->numero_pedido = 'PED-' . date('ymd') . '-' . strtoupper(substr(uniqid(), -8));
         $this->usuario_id = auth()->id();
         $this->estado = 'cotizacion';
         $this->isOpen = true;
@@ -212,7 +345,7 @@ class PedidosIndex extends Component
         $pedido = Pedido::with(['detalles.producto', 'cliente'])->findOrFail($id);
         $this->pedido_id = $id;
         $this->cliente_id = $pedido->cliente_id;
-        $this->cliente_nombre = $pedido->cliente ? $pedido->cliente->nombre_completo . ' (' . $pedido->cliente->correo . ')' : '';
+        $this->cliente_nombre = $pedido->cliente ? $pedido->cliente->nombre_completo . ($pedido->cliente->nit_ci ? ' (CI: ' . $pedido->cliente->nit_ci . ')' : '') . ' - ' . ($pedido->cliente->correo ?? 'Sin correo') : '';
         $this->numero_pedido = $pedido->numero_pedido;
         $this->estado = $pedido->estado;
         $this->monto_pagado = $pedido->monto_pagado;
@@ -328,6 +461,9 @@ class PedidosIndex extends Component
 
         // Resetear campos
         $this->producto_actual_id = null;
+        $this->producto_actual_nombre = '';
+        $this->producto_search = '';
+        $this->productos_buscados = [];
         $this->producto_actual_cantidad = 1;
         $this->producto_actual_personalizacion = '';
         $this->resetValidation();
@@ -586,6 +722,9 @@ class PedidosIndex extends Component
         $this->producto_actual_id = null;
         $this->producto_actual_cantidad = 1;
         $this->producto_actual_personalizacion = '';
+        $this->producto_search = '';
+        $this->productos_buscados = [];
+        $this->producto_actual_nombre = '';
         
         $this->nuevo_cliente_nombre = '';
         $this->nuevo_cliente_apellido = '';
@@ -606,5 +745,85 @@ class PedidosIndex extends Component
     public function updatedEstadoFiltro()
     {
         $this->resetPage();
+    }
+
+    // --- MÉTODOS DE ABONOS ---
+
+    public function abrirModalAbonos($pedidoId)
+    {
+        $pedido = Pedido::with('transaccionesCaja.usuario')->findOrFail($pedidoId);
+        $this->pedido_id = $pedidoId;
+        $this->monto_abono = $pedido->saldo_pendiente; // Sugerir el saldo pendiente por defecto
+        $this->metodo_pago_abono = 'efectivo';
+        $this->referencia_abono = '';
+        $this->abonosHistoricos = $pedido->transaccionesCaja;
+        $this->isOpenAbonosModal = true;
+    }
+
+    public function registrarAbono()
+    {
+        $pedido = Pedido::findOrFail($this->pedido_id);
+
+        if ($pedido->estado === 'cancelado') {
+            session()->flash('error_abono', 'No se pueden registrar pagos en un pedido cancelado.');
+            return;
+        }
+
+        $this->validate([
+            'monto_abono' => 'required|numeric|min:0.01|max:' . $pedido->saldo_pendiente,
+            'metodo_pago_abono' => 'required|in:efectivo,qr,transferencia,otro',
+            'referencia_abono' => 'nullable|max:100'
+        ], [
+            'monto_abono.required' => 'El monto del abono es obligatorio.',
+            'monto_abono.numeric' => 'Debe ingresar un valor numérico.',
+            'monto_abono.min' => 'El abono debe ser mayor a Bs. 0.00.',
+            'monto_abono.max' => 'El abono no puede superar el saldo pendiente del pedido (Bs. ' . number_format($pedido->saldo_pendiente, 2) . ').'
+        ]);
+
+        // REGLA: Exigir caja física abierta para registrar pagos en el panel administrativo
+        $caja = \App\Models\Caja::abierta()->first();
+        if (!$caja) {
+            $this->addError('monto_abono', 'No hay ninguna caja física abierta. Por favor, realice la apertura de caja primero.');
+            return;
+        }
+
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function() use ($pedido, $caja) {
+                // 1. Crear transacción de caja
+                \App\Models\TransaccionCaja::create([
+                    'caja_id' => $caja->id,
+                    'usuario_id' => auth()->id(),
+                    'pedido_id' => $pedido->id,
+                    'tipo' => 'ingreso',
+                    'concepto' => 'Abono de pedido ' . $pedido->numero_pedido,
+                    'monto' => $this->monto_abono,
+                    'metodo_pago' => $this->metodo_pago_abono,
+                    'referencia' => $this->referencia_abono ? trim($this->referencia_abono) : null,
+                    'creado_en' => now(),
+                    'actualizado_en' => now()
+                ]);
+
+                // 2. Incrementar monto pagado en el pedido
+                $pedido->registrarPago($this->monto_abono);
+            });
+
+            session()->flash('message', 'Abono registrado correctamente.');
+            $this->cerrarModalAbonos();
+            $this->resetPage();
+
+        } catch (\Exception $e) {
+            session()->flash('error_abono', 'Error al procesar el pago: ' . $e->getMessage());
+        }
+    }
+
+    public function cerrarModalAbonos()
+    {
+        $this->isOpenAbonosModal = false;
+        $this->pedido_id = null;
+        $this->monto_abono = null;
+        $this->metodo_pago_abono = 'efectivo';
+        $this->referencia_abono = '';
+        $this->abonosHistoricos = [];
+        $this->resetValidation();
     }
 }

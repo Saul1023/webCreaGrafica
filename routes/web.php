@@ -50,4 +50,15 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
     Route::get('/productos', ProductosIndex::class)->name('admin.productos');
     Route::get('/perfil', PerfilIndex::class)->name('admin.perfil');
     Route::get('/pedidos', \App\Livewire\Admin\PedidosIndex::class)->name('admin.pedidos');
+    Route::get('/reportes', \App\Livewire\Admin\ReportesIndex::class)->name('admin.reportes');
+    Route::get('/proveedores', \App\Livewire\Admin\ProveedoresIndex::class)->name('admin.proveedores');
+    Route::get('/compras', \App\Livewire\Admin\ComprasIndex::class)->name('admin.compras');
+    Route::get('/cupones', \App\Livewire\Admin\CuponesIndex::class)->name('admin.cupones');
+    Route::get('/ofertas', \App\Livewire\Admin\OfertasIndex::class)->name('admin.ofertas');
+    Route::get('/caja', \App\Livewire\Admin\CajaIndex::class)->name('admin.caja');
+});
+
+// Panel de Clientes (cliente o admin para soporte)
+Route::middleware(['auth', 'role:cliente,admin'])->prefix('cliente')->group(function () {
+    Route::get('/pedidos', \App\Livewire\Cliente\ClienteDashboard::class)->name('cliente.dashboard');
 });

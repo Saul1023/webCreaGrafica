@@ -11,6 +11,24 @@
     </div>
     @endif
 
+    @php
+        $pendingOrdersCount = \App\Models\Pedido::where('estado', 'pendiente')->count();
+    @endphp
+    @if($pendingOrdersCount > 0)
+    <div class="bg-amber-50 border-l-4 border-amber-500 text-amber-900 p-4 mb-6 rounded-lg shadow-sm flex items-center justify-between animate-pulse">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-exclamation-triangle text-xl text-amber-600"></i>
+            <div>
+                <p class="text-sm font-bold text-amber-800">Nuevos Pedidos por Procesar</p>
+                <p class="text-xs text-amber-705 text-amber-700">Tienes <strong>{{ $pendingOrdersCount }}</strong> {{ $pendingOrdersCount === 1 ? 'pedido pendiente' : 'pedidos pendientes' }} esperando aprobación y coordinación.</p>
+            </div>
+        </div>
+        <button wire:click="$set('estado_filtro', 'pendiente')" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm">
+            Filtrar Pendientes
+        </button>
+    </div>
+    @endif
+
     <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <h2 class="text-2xl font-bold text-gray-800">🛒 Gestión de Pedidos</h2>
 
@@ -109,6 +127,9 @@
                             <button wire:click="edit({{ $pedido->id }})" class="text-blue-600 hover:text-blue-800 mr-2" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </button>
+                            <button wire:click="abrirModalAbonos({{ $pedido->id }})" class="text-emerald-600 hover:text-emerald-800 mr-2" title="Pagos / Registrar Abono" @if($pedido->estado === 'cancelado') disabled @endif>
+                                <i class="fas fa-money-bill-wave"></i>
+                            </button>
                             <button wire:click="confirmDelete({{ $pedido->id }}, '{{ $pedido->numero_pedido }}')" class="text-red-600 hover:text-red-800" title="Eliminar">
                                 <i class="fas fa-trash-alt"></i>
                             </button>
@@ -190,14 +211,28 @@
                                     <div class="flex gap-2">
                                         <div class="relative flex-grow">
                                             <input type="text" wire:model.live.debounce.300ms="cliente_search"
-                                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                                placeholder="Buscar cliente por nombre, apellido o correo...">
+                                                class="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                                placeholder="Buscar cliente por nombre, apellido, CI o correo..."
+                                                wire:focus="buscarClientes">
+                                            <button type="button" wire:click="toggleClientesDropdown" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600">
+                                                <i class="fas fa-chevron-down text-xs"></i>
+                                            </button>
                                             @if(count($clientes_buscados) > 0)
-                                            <div class="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                                            <div class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-100">
                                                 @foreach($clientes_buscados as $cliente)
-                                                <div wire:click="seleccionarCliente({{ $cliente->id }})" class="px-3 py-2 hover:bg-gray-100 cursor-pointer">
-                                                    <div class="font-medium">{{ $cliente->nombre_completo }}</div>
-                                                    <div class="text-xs text-gray-500">{{ $cliente->correo }}</div>
+                                                <div wire:click="seleccionarCliente({{ $cliente->id }}, {{ $cliente->is_usuario ? 'true' : 'false' }})" class="px-3 py-2 hover:bg-blue-50 cursor-pointer transition duration-150 text-left">
+                                                    <div class="flex justify-between items-center">
+                                                        <span class="font-medium text-gray-800">
+                                                            {{ $cliente->nombre_completo }}
+                                                            @if($cliente->is_usuario)
+                                                            <span class="text-[10px] text-blue-600 bg-blue-50 font-semibold ml-1.5 px-1.5 py-0.5 rounded border border-blue-200">Usuario Registrado</span>
+                                                            @endif
+                                                        </span>
+                                                        @if($cliente->nit_ci)
+                                                        <span class="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded font-mono">CI: {{ $cliente->nit_ci }}</span>
+                                                        @endif
+                                                    </div>
+                                                    <div class="text-xs text-gray-500">{{ $cliente->correo ?? 'Sin correo' }}</div>
                                                 </div>
                                                 @endforeach
                                             </div>
@@ -296,12 +331,42 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">Productos</label>
                             <div class="border rounded-lg p-4 mb-2">
                                 <div class="grid grid-cols-3 gap-2 mb-2">
-                                    <select wire:model="producto_actual_id" class="border rounded-lg p-2 text-sm col-span-2">
-                                        <option value="">Seleccionar producto...</option>
-                                        @foreach($productos as $producto)
-                                        <option value="{{ $producto->id }}">{{ $producto->nombre }} (Bs. {{ number_format($producto->precio, 2) }}) - Stock: {{ $producto->stock }}</option>
-                                        @endforeach
-                                    </select>
+                                    <div class="col-span-2 relative">
+                                        @if(!$producto_actual_id)
+                                        <div class="relative">
+                                            <input type="text" wire:model.live.debounce.300ms="producto_search"
+                                                class="w-full pl-3 pr-8 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                                placeholder="Buscar producto por nombre, SKU..."
+                                                wire:focus="buscarProductos">
+                                            <button type="button" wire:click="toggleProductosDropdown" class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600">
+                                                <i class="fas fa-chevron-down text-xs"></i>
+                                            </button>
+                                        </div>
+                                        @if(count($productos_buscados) > 0)
+                                        <div class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-100">
+                                            @foreach($productos_buscados as $prod)
+                                            <div wire:click="seleccionarProducto({{ $prod->id }})" class="px-3 py-2 hover:bg-blue-50 cursor-pointer transition duration-150 text-left">
+                                                <div class="flex justify-between items-center text-xs">
+                                                    <span class="font-medium text-gray-800 text-left">{{ $prod->nombre }}</span>
+                                                    <span class="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-mono text-[10px]">Stock: {{ $prod->stock }}</span>
+                                                </div>
+                                                <div class="text-[10px] text-gray-500 flex justify-between mt-0.5">
+                                                    <span>SKU: {{ $prod->sku }}</span>
+                                                    <span class="font-bold text-green-600">Bs. {{ number_format($prod->precio, 2) }}</span>
+                                                </div>
+                                            </div>
+                                            @endforeach
+                                        </div>
+                                        @endif
+                                        @else
+                                        <div class="flex items-center justify-between bg-blue-50 p-2 rounded-lg text-xs">
+                                            <div class="font-medium text-gray-800 text-left">{{ $producto_actual_nombre }}</div>
+                                            <button type="button" wire:click="$set('producto_actual_id', null)" class="text-red-500 hover:text-red-700">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        @endif
+                                    </div>
                                     <input type="number" wire:model="producto_actual_cantidad" min="1" placeholder="Cantidad"
                                         class="border rounded-lg p-2 text-sm">
                                 </div>
@@ -371,8 +436,8 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Monto Pagado (Bs.)</label>
-                            <input type="number" step="0.01" wire:model="monto_pagado"
-                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <input type="number" step="0.01" wire:model="monto_pagado" readonly
+                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed">
                             @error('monto_pagado') <span class="text-red-500 text-xs mt-1 block">{{ $message }}</span> @enderror
                         </div>
                     </div>
@@ -481,28 +546,118 @@
     </div>
     @endif
 
-    <!-- MODAL ELIMINAR -->
-    @if($showDeleteModal)
+    <!--     <!-- MODAL DE ABONOS / REGISTRO DE PAGOS -->
+    @if($isOpenAbonosModal)
     <div class="fixed inset-0 z-50 overflow-y-auto">
-        <div class="flex items-center justify-center min-h-screen px-4">
-            <div class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
-            <div class="relative bg-white rounded-xl shadow-2xl max-w-md w-full">
-                <div class="p-6 text-center">
-                    <div class="mx-auto w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
-                        <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" wire:click="cerrarModalAbonos"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div class="relative inline-block align-bottom bg-white rounded-xl shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+                <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 rounded-t-xl text-white">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3 text-left">
+                            <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl">
+                                <i class="fas fa-money-bill-wave"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold">Registro de Abonos / Pagos</h3>
+                                <p class="text-xs text-emerald-100">Controle y registre pagos parciales o totales de este pedido</p>
+                            </div>
+                        </div>
+                        <button type="button" wire:click="cerrarModalAbonos" class="text-white/80 hover:text-white transition">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
                     </div>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">Confirmar Eliminación</h3>
-                    <p class="text-sm text-gray-500">
-                        ¿Estás seguro de eliminar el pedido <strong class="text-red-600">{{ $pedido_numero_eliminar }}</strong>?
-                    </p>
-                    <p class="text-xs text-gray-400 mt-2">Esta acción no se puede deshacer.</p>
                 </div>
-                <div class="bg-gray-50 px-6 py-3 rounded-b-xl flex justify-end gap-2">
-                    <button wire:click="closeDeleteModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
-                        Cancelar
-                    </button>
-                    <button wire:click="deletePedido" class="px-5 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition">
-                        <i class="fas fa-trash-alt mr-1"></i> Eliminar
+
+                <div class="px-6 py-6 text-left grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {{-- Historial de Abonos --}}
+                    <div>
+                        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3"><i class="fas fa-history mr-1"></i> Historial de Pagos</h4>
+                        <div class="border rounded-xl p-3 bg-gray-50 max-h-64 overflow-y-auto space-y-3 custom-scrollbar">
+                            @forelse($abonosHistoricos as $abono)
+                                <div class="bg-white p-3 rounded-lg border border-gray-150 shadow-xs text-xs">
+                                    <div class="flex justify-between font-bold text-gray-800">
+                                        <span>Bs. {{ number_format($abono->monto, 2) }}</span>
+                                        <span class="text-gray-400 font-normal font-mono">{{ $abono->creado_en->format('d/m/Y H:i') }}</span>
+                                    </div>
+                                    <div class="text-gray-500 mt-1 flex items-center gap-1.5 uppercase font-semibold">
+                                        @if($abono->metodo_pago === 'efectivo')
+                                            <i class="fas fa-coins text-emerald-500"></i> Efectivo
+                                        @elseif($abono->metodo_pago === 'qr')
+                                            <i class="fas fa-qrcode text-blue-500"></i> QR
+                                        @elseif($abono->metodo_pago === 'transferencia')
+                                            <i class="fas fa-university text-indigo-500"></i> Transfer
+                                        @else
+                                            <i class="fas fa-credit-card text-gray-400"></i> Otro
+                                        @endif
+                                    </div>
+                                    @if($abono->referencia)
+                                        <div class="text-[10px] text-gray-400 font-mono mt-1">Ref: {{ $abono->referencia }}</div>
+                                    @endif
+                                    <div class="text-[9px] text-gray-400 mt-1">Registrado por: {{ $abono->usuario->nombre ?? 'Sistema' }}</div>
+                                </div>
+                            @empty
+                                <p class="text-xs text-gray-400 italic text-center py-8">No se han registrado abonos para este pedido.</p>
+                            @endforelse
+                        </div>
+                    </div>
+
+                    {{-- Formulario para Registrar Nuevo Abono --}}
+                    <div>
+                        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3"><i class="fas fa-plus-circle mr-1"></i> Registrar Nuevo Abono</h4>
+                        
+                        @if(session()->has('error_abono'))
+                            <div class="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-lg text-xs mb-3 font-semibold">
+                                {{ session('error_abono') }}
+                            </div>
+                        @endif
+
+                        <form wire:submit.prevent="registrarAbono" class="space-y-4">
+                            {{-- Monto Abono --}}
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1.5">Monto del Pago (Bs.) <span class="text-red-500">*</span></label>
+                                <input type="number" step="0.01" wire:model="monto_abono" placeholder="0.00"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                                @error('monto_abono') <span class="text-red-500 text-xs mt-1 block font-semibold">{{ $message }}</span> @enderror
+                            </div>
+
+                            {{-- Método de Pago --}}
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1.5">Método de Pago <span class="text-red-500">*</span></label>
+                                <select wire:model="metodo_pago_abono"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition font-semibold">
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="qr">Pago QR</option>
+                                    <option value="transferencia">Transferencia Bancaria</option>
+                                    <option value="otro">Otro</option>
+                                </select>
+                                @error('metodo_pago_abono') <span class="text-red-500 text-xs mt-1 block font-semibold">{{ $message }}</span> @enderror
+                            </div>
+
+                            {{-- Referencia --}}
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1.5">Código de Referencia / Comprobante</label>
+                                <input type="text" wire:model="referencia_abono" placeholder="Nro de transf, captura, etc."
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                                @error('referencia_abono') <span class="text-red-500 text-xs mt-1 block font-semibold">{{ $message }}</span> @enderror
+                            </div>
+
+                            <button type="submit" wire:loading.attr="disabled"
+                                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50">
+                                <i class="fas fa-save" wire:loading.remove wire:target="registrarAbono"></i>
+                                <i class="fas fa-spinner fa-spin" wire:loading wire:target="registrarAbono"></i>
+                                <span>Registrar Pago</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-3 rounded-b-xl flex justify-end border-t">
+                    <button type="button" wire:click="cerrarModalAbonos"
+                        class="px-4 py-2 text-sm font-medium text-gray-750 bg-white border border-gray-350 rounded-lg hover:bg-gray-50 transition">
+                        Cerrar
                     </button>
                 </div>
             </div>

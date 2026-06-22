@@ -20,8 +20,7 @@
                 <div>
                     <p class="text-sm font-medium text-gray-500 mb-1">Total Usuarios</p>
                     <p class="text-3xl font-bold text-gray-800">
-                        {{ \App\Models\User::count() }}
-                        {{-- Cambiado de Usuario a User si usas el estándar de Laravel --}}
+                        {{ \App\Models\Usuario::count() }}
                     </p>
                 </div>
                 <div class="bg-blue-100 p-3 rounded-full text-blue-600">

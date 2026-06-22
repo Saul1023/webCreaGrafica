@@ -13,15 +13,19 @@ class Pedido extends Model
     protected $fillable = [
         'cliente_id',
         'usuario_id',
+        'cupon_id',
         'numero_pedido',
         'estado',
         'total',
+        'descuento',
         'monto_pagado',
         'fecha_entrega'
     ];
 
     protected $casts = [
+        'cupon_id' => 'integer',
         'total' => 'decimal:2',
+        'descuento' => 'decimal:2',
         'monto_pagado' => 'decimal:2',
         'saldo_pendiente' => 'decimal:2',
         'fecha_entrega' => 'date',
@@ -30,6 +34,10 @@ class Pedido extends Model
     ];
 
     // Relaciones
+    public function cupon()
+    {
+        return $this->belongsTo(Cupon::class, 'cupon_id');
+    }
     public function cliente()
     {
         return $this->belongsTo(Cliente::class, 'cliente_id');
@@ -43,6 +51,11 @@ class Pedido extends Model
     public function detalles()
     {
         return $this->hasMany(DetallePedido::class, 'pedido_id');
+    }
+
+    public function transaccionesCaja()
+    {
+        return $this->hasMany(TransaccionCaja::class, 'pedido_id');
     }
 
     // Accessors

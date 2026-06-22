@@ -61,6 +61,21 @@ class Usuario extends Authenticatable
         return $this->hasMany(MovimientoStock::class, 'usuario_id');
     }
 
+    public function cajasAbiertas()
+    {
+        return $this->hasMany(Caja::class, 'usuario_apertura_id');
+    }
+
+    public function cajasCerradas()
+    {
+        return $this->hasMany(Caja::class, 'usuario_cierre_id');
+    }
+
+    public function transaccionesCaja()
+    {
+        return $this->hasMany(TransaccionCaja::class, 'usuario_id');
+    }
+
     // Scopes
     public function scopeActivo($query)
     {

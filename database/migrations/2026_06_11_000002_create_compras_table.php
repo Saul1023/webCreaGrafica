@@ -1,0 +1,36 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('compras', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('proveedor_id')->constrained('proveedores')->restrictOnDelete();
+            $table->foreignId('usuario_id')->constrained('usuarios')->restrictOnDelete();
+            $table->string('numero_factura', 50)->nullable();
+            $table->decimal('total', 10, 2)->default(0);
+            $table->timestampTz('creado_en')->useCurrent();
+            $table->timestampTz('actualizado_en')->useCurrent();
+
+            // Índices
+            $table->index('creado_en');
+            $table->index('numero_factura');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('compras');
+    }
+};
